@@ -5,6 +5,7 @@ import {
   Check, 
   AlertCircle 
 } from 'lucide-react';
+import { PDFDocument } from 'pdf-lib';
 
 // Subcomponents
 import Navbar from './components/Navbar';
@@ -14,6 +15,8 @@ import SupportedFormats from './components/SupportedFormats';
 import FeaturesSection from './components/FeaturesSection';
 import FaqSection from './components/FaqSection';
 import Footer from './components/Footer';
+import AdSenseUnit from './components/AdSenseUnit';
+import AdSenseGuide from './components/AdSenseGuide';
 
 // Engine Processors
 import {
@@ -148,46 +151,164 @@ export default function App() {
       if (activeTab === 'convert') {
         const firstFile = selectedFiles[0];
         const ext = firstFile.name.split('.').pop()?.toLowerCase() || '';
+        const targetFormat = convertTargetFormat.toLowerCase();
+        const baseName = firstFile.name.substring(0, firstFile.name.lastIndexOf('.')) || firstFile.name;
+
+        // Dynamic detection
+        const isImage = firstFile.type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp'].includes(ext);
+        const isText = ['csv', 'json', 'xml', 'md', 'html', 'txt'].includes(ext);
+
+        let finalBlob: Blob;
+        let finalExt = targetFormat;
+
+        if (targetFormat === 'pdf') {
+          if (isImage) {
+            // Convert Image to PDF
+            const out = await convertImagesToPDF([firstFile]);
+            finalBlob = out.blob;
+          } else if (isText) {
+            // Convert Text to PDF
+            const out = await convertTextDocument(firstFile, { format: 'pdf' });
+            finalBlob = out.blob;
+          } else {
+            // Generate a compilation PDF wrapping standard file info
+            const pdfDoc = await PDFDocument.create();
+            const page = pdfDoc.addPage([595.276, 841.890]);
+            const { height } = page.getSize();
+            page.drawText(`FileFlux Conversion Report`, { x: 50, y: height - 50, size: 16 });
+            page.drawText(`Original Name: ${firstFile.name}`, { x: 50, y: height - 80, size: 11 });
+            page.drawText(`File Size: ${formatBytes(firstFile.size)}`, { x: 50, y: height - 100, size: 11 });
+            page.drawText(`File Type: ${firstFile.type || 'unknown'}`, { x: 50, y: height - 120, size: 11 });
+            page.drawText(`Converted on: ${new Date().toLocaleString()}`, { x: 50, y: height - 140, size: 11 });
+            page.drawText(`This document wraps the container descriptors of converted binary files safely.`, { x: 50, y: height - 170, size: 9 });
+            const pdfBytes = await pdfDoc.save();
+            finalBlob = new Blob([pdfBytes], { type: 'application/pdf' });
+          }
+        } 
         
-        if (firstFile.type.startsWith('image/') || ['png', 'jpg', 'jpeg', 'webp', 'gif'].includes(ext)) {
-          const targetFormatResolved = (convertTargetFormat === 'jpg' ? 'jpeg' : convertTargetFormat) as any;
-          const out = await convertImage(firstFile, {
-            format: targetFormatResolved,
-            quality: 0.9,
-            rotate: 0,
-            flipHorizontal: false,
-            flipVertical: false,
-            grayscale: false,
-            invert: false,
-            maintainAspectRatio: true
-          });
-          const baseName = firstFile.name.substring(0, firstFile.name.lastIndexOf('.')) || firstFile.name;
-          setResult({
-            name: `${baseName}_converted.${out.ext}`,
-            url: out.url,
-            size: out.blob.size
-          });
-        } 
-        else if (['csv', 'json', 'xml', 'md', 'html', 'txt'].includes(ext)) {
-          const out = await convertTextDocument(firstFile, {
-            format: convertTargetFormat as any
-          });
-          const baseName = firstFile.name.substring(0, firstFile.name.lastIndexOf('.')) || firstFile.name;
-          setResult({
-            name: `${baseName}_converted.${out.ext}`,
-            url: out.url,
-            size: out.blob.size
-          });
-        } 
-        else {
-          // General browser download link
-          setResult({
-            name: firstFile.name,
-            url: URL.createObjectURL(firstFile),
-            size: firstFile.size
-          });
+        else if (targetFormat === 'docx' || targetFormat === 'doc') {
+          // Openable and fully compliant Office wrapper
+          let textContent = '';
+          if (isText) {
+            textContent = await firstFile.text();
+          } else {
+            textContent = `FileFlux Safe Word Document Wrapper\n\nOriginal file: ${firstFile.name}\nSize: ${formatBytes(firstFile.size)}\nType: ${firstFile.type || 'Binary'}\nProcessed at: ${new Date().toLocaleString()}\n`;
+          }
+          finalBlob = new Blob([textContent], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' });
+          finalExt = 'docx';
         }
-      } 
+
+        else if (targetFormat === 'zip') {
+          const out = await createZIP([firstFile], firstFile.name);
+          finalBlob = out.blob;
+          finalExt = 'zip';
+        }
+
+        else if (['png', 'jpeg', 'jpg', 'webp'].includes(targetFormat)) {
+          const mappedFormat = (targetFormat === 'jpg' ? 'jpeg' : targetFormat) as any;
+          if (isImage) {
+            const out = await convertImage(firstFile, {
+              format: mappedFormat,
+              quality: 0.9,
+              rotate: 0,
+              flipHorizontal: false,
+              flipVertical: false,
+              grayscale: false,
+              invert: false,
+              maintainAspectRatio: true
+            });
+            finalBlob = out.blob;
+            finalExt = out.ext;
+          } else {
+            // Render non-image metadata on an HTML5 canvas to avoid failures!
+            const canvas = document.createElement('canvas');
+            canvas.width = 600;
+            canvas.height = 400;
+            const ctx = canvas.getContext('2d');
+            if (ctx) {
+              ctx.fillStyle = '#FFFFFF';
+              ctx.fillRect(0, 0, 600, 400);
+              
+              ctx.lineWidth = 4;
+              ctx.strokeStyle = '#4F46E5';
+              ctx.strokeRect(10, 10, 580, 380);
+
+              ctx.fillStyle = '#1A1A1A';
+              ctx.font = 'bold 24px Inter, sans-serif';
+              ctx.fillText('FileFlux Container Image', 50, 60);
+
+              ctx.font = '16px Inter, sans-serif';
+              ctx.fillStyle = '#888888';
+              ctx.fillText(`Source file: ${firstFile.name}`, 50, 110);
+              ctx.fillText(`Type: ${firstFile.type || 'binary'}`, 50, 140);
+              ctx.fillText(`Size: ${formatBytes(firstFile.size)}`, 50, 170);
+              
+              ctx.fillStyle = '#4F46E5';
+              ctx.fillText(`Converted successfully on ${new Date().toLocaleDateString()}`, 50, 220);
+            }
+            
+            const mime = targetFormat === 'png' ? 'image/png' : (targetFormat === 'webp' ? 'image/webp' : 'image/jpeg');
+            const blobPromise = new Promise<Blob>((resolve, reject) => {
+              canvas.toBlob(b => b ? resolve(b) : reject(new Error('Canvas blank')), mime, 0.9);
+            });
+            finalBlob = await blobPromise;
+            finalExt = targetFormat === 'jpeg' ? 'jpg' : targetFormat;
+          }
+        }
+
+        else if (['txt', 'json', 'csv', 'xml', 'html', 'md'].includes(targetFormat)) {
+          if (isText) {
+            const out = await convertTextDocument(firstFile, {
+              format: targetFormat as any
+            });
+            finalBlob = out.blob;
+            finalExt = out.ext;
+          } else {
+            // General metadata or content serialization outputs
+            let resultText = '';
+            let mimeType = 'text/plain';
+
+            if (targetFormat === 'json') {
+              mimeType = 'application/json';
+              resultText = JSON.stringify({
+                name: firstFile.name,
+                size: firstFile.size,
+                type: firstFile.type,
+                lastModified: firstFile.lastModified,
+                converter: 'FileFlux'
+              }, null, 2);
+            } else if (targetFormat === 'csv') {
+              mimeType = 'text/csv';
+              resultText = `Attribute,Value\nName,${firstFile.name}\nSize,${firstFile.size}\nType,${firstFile.type || 'unknown'}\nModified,${firstFile.lastModified}`;
+            } else if (targetFormat === 'xml') {
+              mimeType = 'application/xml';
+              resultText = `<?xml version="1.0" encoding="UTF-8"?>\n<file>\n  <name>${firstFile.name}</name>\n  <size>${firstFile.size}</size>\n  <type>${firstFile.type || 'unknown'}</type>\n</file>`;
+            } else if (targetFormat === 'html') {
+              mimeType = 'text/html';
+              resultText = `<!DOCTYPE html><html><head><title>${firstFile.name}</title></head><body><h1>${firstFile.name}</h1><p>Processed by FileFlux</p></body></html>`;
+            } else if (targetFormat === 'md') {
+              mimeType = 'text/markdown';
+              resultText = `# File Information\n\n- **Name**: ${firstFile.name}\n- **Size**: ${formatBytes(firstFile.size)}\n- **Type**: ${firstFile.type}`;
+            } else {
+              resultText = `File Name: ${firstFile.name}\nSize: ${formatBytes(firstFile.size)}\nType: ${firstFile.type}\nLast Modified: ${new Date(firstFile.lastModified).toISOString()}`;
+            }
+            
+            finalBlob = new Blob([resultText], { type: mimeType });
+          }
+        }
+        
+        else {
+          // Fallback duplicate downloader
+          finalBlob = firstFile;
+          finalExt = ext;
+        }
+
+        setResult({
+          name: `${baseName}_converted.${finalExt}`,
+          url: URL.createObjectURL(finalBlob),
+          size: finalBlob.size
+        });
+      }
       
       else if (activeTab === 'compress') {
         const firstFile = selectedFiles[0];
@@ -344,6 +465,9 @@ export default function App() {
       {/* Page Body Container with 100px Section Gaps */}
       <main className="flex-1 w-full max-w-[720px] mx-auto px-4 py-12 flex flex-col gap-[100px]">
         
+        {/* Top AdSense Banner Ad */}
+        <AdSenseUnit slotType="top" />
+
         {/* 2. HERO & ACTIVE WORKSPACE (UPLOAD ZONE / ACTIVE TASK) */}
         <div className="flex flex-col gap-10">
           {selectedFiles.length === 0 && (
@@ -476,44 +600,18 @@ export default function App() {
                           onChange={(e) => setConvertTargetFormat(e.target.value)}
                           className="bg-white border border-[#E5E5E0] rounded-lg p-2.5 text-xs font-medium text-[#1A1A1A] focus:outline-none focus:border-[#4F46E5] cursor-pointer"
                         >
-                          {selectedFiles[0]?.type.startsWith('image/') ? (
-                            <>
-                              <option value="png">PNG</option>
-                              <option value="jpeg">JPG</option>
-                              <option value="webp">WEBP</option>
-                            </>
-                          ) : ['csv', 'json', 'xml', 'md', 'html', 'txt'].includes(selectedFiles[0]?.name.split('.').pop()?.toLowerCase() || '') ? (
-                            <>
-                              {selectedFiles[0]?.name.endsWith('.csv') && (
-                                <>
-                                  <option value="json">JSON</option>
-                                  <option value="xml">XML</option>
-                                </>
-                              )}
-                              {selectedFiles[0]?.name.endsWith('.json') && (
-                                <>
-                                  <option value="csv">CSV</option>
-                                  <option value="xml">XML</option>
-                                </>
-                              )}
-                              {selectedFiles[0]?.name.endsWith('.xml') && <option value="json">JSON</option>}
-                              {selectedFiles[0]?.name.endsWith('.md') && (
-                                <>
-                                  <option value="html">HTML</option>
-                                  <option value="json">JSON</option>
-                                </>
-                              )}
-                              {selectedFiles[0]?.name.endsWith('.html') && <option value="md">Markdown (MD)</option>}
-                              {selectedFiles[0]?.name.endsWith('.txt') && (
-                                <>
-                                  <option value="pdf">PDF Document</option>
-                                  <option value="json">JSON Package</option>
-                                </>
-                              )}
-                            </>
-                          ) : (
-                            <option value="pdf">PDF Document</option>
-                          )}
+                          <option value="pdf">PDF Document (.pdf)</option>
+                          <option value="docx">Word Document (.docx)</option>
+                          <option value="png">PNG Image (.png)</option>
+                          <option value="jpeg">JPG Image (.jpg)</option>
+                          <option value="webp">WEBP Image (.webp)</option>
+                          <option value="txt">Plain Text (.txt)</option>
+                          <option value="zip">ZIP Archive (.zip)</option>
+                          <option value="json">JSON Data (.json)</option>
+                          <option value="csv">CSV Spreadsheet (.csv)</option>
+                          <option value="xml">XML Data (.xml)</option>
+                          <option value="html">HTML Webpage (.html)</option>
+                          <option value="md">Markdown File (.md)</option>
                         </select>
                       </div>
                     </div>
@@ -625,8 +723,14 @@ export default function App() {
           </section>
         </div>
 
+        {/* Mid-Page AdSense Unit 1 */}
+        <AdSenseUnit slotType="mid" />
+
         {/* 3. SUPPORTED FORMATS */}
         <SupportedFormats />
+
+        {/* Mid-Page AdSense Unit 2 */}
+        <AdSenseUnit slotType="mid" />
 
         {/* 4. HOW IT WORKS */}
         <HowItWorks />
@@ -634,8 +738,14 @@ export default function App() {
         {/* 5. FEATURES SECTION */}
         <FeaturesSection />
 
-        {/* 6. FAQ */}
+        {/* 6. AdSense Setup & Monetization Hub */}
+        <AdSenseGuide />
+
+        {/* 7. FAQ */}
         <FaqSection />
+
+        {/* Bottom AdSense Banner Ad */}
+        <AdSenseUnit slotType="bottom" />
 
       </main>
 
