@@ -1,0 +1,6 @@
+{
+  "name": "FileFlux - File Converter",
+  "description": "Convert, compress, merge, split, and extract files 100% in your browser. Files never leave your device.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

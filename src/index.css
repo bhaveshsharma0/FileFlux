@@ -1,0 +1,41 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-heading: "Inter", sans-serif;
+  --font-sans: "Inter", sans-serif;
+  --font-mono: "Inter", sans-serif; /* User asked to replace custom system monospace/code text completely */
+
+  --color-primary: #4F46E5;
+  --color-success: #059669;
+  --color-danger: #DC2626;
+
+  /* Roundedness */
+  --radius-card: 16px;
+  --radius-btn: 8px;
+  --radius-pill: 24px;
+}
+
+/* Base resets */
+html {
+  font-family: 'Inter', sans-serif;
+  scroll-behavior: smooth;
+  background-color: #FFFFFF !important;
+  color: #1A1A1A !important;
+}
+
+body {
+  background-color: #FFFFFF !important;
+  color: #1A1A1A !important;
+  font-family: 'Inter', sans-serif;
+}
+
+/* Force Light Theme elements to avoid browser dark default matching */
+body.dark-theme, body.light-theme, body {
+  background-color: #FFFFFF !important;
+  color: #1A1A1A !important;
+}
+
+.transition-all-custom {
+  transition: all 200ms ease;
+}
